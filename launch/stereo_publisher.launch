@@ -1,0 +1,103 @@
+<?xml version="1.0"?>
+<!-- depthai_ros_app/launch/stereo_publisher.launch
+ base: ~/catkin_ws/src/luxonis/depthai-ros-examples/depthai_examples/launch/stereo_node.launch
+
+ How to run.
+ 1. PC
+  $ roscore
+ 2. SBC
+  $ roslaunch depthai_ros_app stereo_publisher.launch
+ 3. PC
+  $ roslaunch depthai_ros_app stereo_publisher.launch PC:=true
+ -->
+
+
+<launch>
+    <!-- <args for urdf/> -->
+    <arg name="camera_model"      default="OAK-D" /> <!-- 'zed' or 'zedm' -->
+    <arg name="tf_prefix"         default="oak" />
+    <arg name="base_frame"        default="oak-d_frame" />
+    <arg name="parent_frame"      default="oak-d-base-frame" />
+
+    <arg name="cam_pos_x"         default="0.0" /> <!-- Position respect to base frame (i.e. "base_link) -->
+    <arg name="cam_pos_y"         default="0.0" /> <!-- Position respect to base frame (i.e. "base_link) -->
+    <arg name="cam_pos_z"         default="0.0" /> <!-- Position respect to base frame (i.e. "base_link) -->
+    <arg name="cam_roll"          default="0.0" /> <!-- Orientation respect to base frame (i.e. "base_link) -->
+    <arg name="cam_pitch"         default="0.0" /> <!-- Orientation respect to base frame (i.e. "base_link) -->
+    <arg name="cam_yaw"           default="0.0" /> <!-- Orientation respect to base frame (i.e. "base_link) -->
+    
+    <arg name="confidence"        default="200" /> 
+    <arg name="LRchecktresh"      default="5" /> 
+    <arg name="lrcheck"           default="true" /> 
+    <arg name="extended"          default="false" /> 
+    <arg name="subpixel"          default="true" />
+    <arg name="monoResolution"    default="400p" /> 
+    <arg name="camera_param_uri"  default="package://depthai_examples/params/camera" />
+
+    <arg name="PC" default="false"/>
+    <arg name="POINT" default="false"/>
+ 
+    <arg name="DEPTH" default="true"/>
+    <arg if="$(arg DEPTH)" name="mode"              default="depth" />   <!-- "depth" or "stereo" -->
+    <arg unless="$(arg DEPTH)" name="mode"          default="stereo" />   <!-- "depth" or "stereo" -->
+
+    <param name="use_sim_time" type="bool" value="False"/>
+
+    <arg name="BASE_LINK" default="base_link"/>
+
+    <!-- 180[d] -->
+    <arg name="pi/2" value="1.5707963267948966" />
+    <!-- <arg name="optical_rotate" value="0 0 0 -$(arg pi/2) 0 -$(arg pi/2)" /> -->
+    <arg name="optical_rotate" value="0 0 0.19 -$(arg pi/2) 0 -$(arg pi/2)" />
+
+    <group unless="$(arg PC)">
+        <node pkg="tf" type="static_transform_publisher" name="oak_base_link"
+            args="$(arg optical_rotate) $(arg BASE_LINK) oak-d_frame 100" />
+        <node pkg="tf" type="static_transform_publisher" name="oak_right_camera_link"
+            args="0.038 0 0 0 0 0 oak-d_frame oak_right_camera_frame 100" /> 
+        <node pkg="tf" type="static_transform_publisher" name="oak_right_camera_optical_link"
+            args="0 0 0 0 0 0 oak_right_camera_frame oak_right_camera_optical_frame 100" /> 
+        <node pkg="tf" type="static_transform_publisher" name="oak_left_camera_link"
+            args="-0.038 0 0 0 0 0 oak-d_frame oak_left_camera_frame 100" /> 
+        <node pkg="tf" type="static_transform_publisher" name="oak_left_camera_optical_link"
+            args="0 0 0 0 0 0 oak_left_camera_frame oak_left_camera_optical_frame 100" /> 
+    </group>
+
+
+    <group unless="$(arg PC)" >
+        <!-- launch-prefix="xterm -e gdb (add [- - args] without space) -->
+        <node name="stereo_publisher" pkg="depthai_ros_app" type="stereo_publisher" output="screen" required="true">
+            <param name="tf_prefix"        value="$(arg tf_prefix)"/>
+            <!-- <param name="camera_name"      value="$(arg camera_name)"/> -->
+            <param name="camera_param_uri" value="$(arg camera_param_uri)"/>
+            <param name="mode"             value="$(arg mode)"/>
+            <param name="lrcheck"          value="$(arg lrcheck)"/>
+            <param name="extended"         value="$(arg extended)"/>
+            <param name="subpixel"         value="$(arg subpixel)"/>
+            <param name="confidence"       value="$(arg confidence)"/>
+            <param name="LRchecktresh"     value="$(arg LRchecktresh)"/>
+            <param name="monoResolution"   value="$(arg monoResolution)"/>
+            <!--
+            /stereo_publisher/left/camera_info
+            /stereo_publisher/left/image
+            /stereo_publisher/right/camera_info
+            /stereo_publisher/right/image
+            /stereo_publisher/stereo/disparity
+            -->
+        </node>            
+
+        <!-- Create point cloud for the planner -->
+        <node if="$(arg POINT)" pkg="nodelet" type="nodelet" name="depth2cloud" args="standalone rtabmap_ros/point_cloud_xyz">
+            <remap from="depth/image"       to="/stereo_publisher/stereo/depth"/>
+            <remap from="depth/camera_info" to="/stereo_publisher/stereo/camera_info"/>
+            <remap from="cloud"                 to="/camera/depth/points"/>
+            
+            <param name="voxel_size" type="double" value="0.05"/>
+            <param name="decimation" type="int" value="4"/>
+            <param name="max_depth" type="double" value="4"/>
+        </node>
+
+    </group>
+
+</launch>
+

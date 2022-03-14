@@ -1,4 +1,5 @@
 # depthai_ros_app
+OAK-D-Lite rgb camera and depth combined on Jetson Nano 2G.  
 rgb_depth.cpp    
   
 How to use.  

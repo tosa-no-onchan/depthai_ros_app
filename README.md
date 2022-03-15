@@ -18,6 +18,6 @@ or
 $roslaunch depthai_ros_app rgb_depth.launch  
 on Remote PC  
 $rviz  
-add /rgb/image/compressed  
-add /stereo_publisher/stereo/depth/compressedDepth  
-
+add /rgb/image/Image compressed  
+add /stereo_publisher/stereo/depth/Image compressedDepth  
+add /stereo_publisher/stereo/depth/DepthCloud compressedDepth

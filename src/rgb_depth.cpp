@@ -61,7 +61,7 @@ static void updateBlendWeights(int percentRgb, void* ctx) {
     depthWeight = 1.f - rgbWeight;
 }
 
-#define FREQUENCY_CAPUTION_HZ               15.2f   // 15[hz]
+#define FREQUENCY_CAPUTION_HZ               16.0f   // 15[hz]
 
 int main(int argc, char** argv){
     using namespace std;
@@ -206,8 +206,10 @@ int main(int argc, char** argv){
     //stereo->disparity.link(depthOut->input);        // オリジナルの設定
     stereo->depth.link(depthOut->input);               // こちらを試す。 2022.3.3
 
+    std::cout << "rgb_depth:#5 " << std::endl;
     // Connect to device and start pipeline
     dai::Device device(pipeline);
+    std::cout << "rgb_depth:#6 " << std::endl;
 
     // Sets queues size and behavior
     //for(const auto& name : queueNames) {
@@ -267,13 +269,18 @@ int main(int argc, char** argv){
     int depth_cnt=0;
     u_int32_t camera_sync_cnt=0;
 
-    std::chrono::system_clock::time_point  start, end, cur_t,now_t; // 型は auto で可
+    std::chrono::system_clock::time_point  start, end, cur_t,cur_t2,now_t; // 型は auto で可
     start = std::chrono::system_clock::now(); // 計測開始時間
     cur_t = std::chrono::system_clock::now(); // 計測開始時間
+    cur_t2 = std::chrono::system_clock::now(); // 計測開始時間
 
     bool first_f = true;
+    bool exec_f2 = false;
+    bool exec_f3 = false;
+    bool exec_f4 = false;
 
     double fs=rate;
+    double m_rate=33.0;     // main rate
     int sleep_nt = (int)(1000.f / rate)/6 * 1000;  // micro sec
     //int sleep_nt = 10 * 1000;
     sleep_nt = 3*1000;
@@ -287,43 +294,53 @@ int main(int argc, char** argv){
     while(true) {
         now_t = std::chrono::system_clock::now(); // 今の時間
         double wait_d = std::chrono::duration_cast<std::chrono::milliseconds>(now_t-cur_t).count(); //処理に要した時間をミリ秒に変換
-        if (wait_d >= ((double)(1000.0 / rate)+off_my) || first_f == true){
+        double wait_d2 = std::chrono::duration_cast<std::chrono::milliseconds>(now_t-cur_t2).count(); //処理に要した時間をミリ秒に変換
 
-            //std::cout << "wait_d: " << wait_d << std::endl;
-            // for camera sync with foxbot_core3.
-            if((camera_sync_cnt % 5) == 0){
-                // /camera/sync Publish
-                ros::Time now_tmp = ros::Time::now();
-                // foxbot_core3 の publish 時刻を、off_fox[ms] だけ、早くする。
-                if(off_fox > 0.0){
-                    double tx = now_tmp.toSec() - off_fox / 1000.0;
-                    now_tmp.fromSec(tx);
+        //if (wait_d >= ((double)(1000.0 / rate)+off_my) || first_f == true){
+        if (wait_d >= (double)(1000.0 / m_rate) || first_f == true){    // main access rate
+            if (wait_d2 >= (double)(1000.0 / rate) || first_f == true){  // publish rate
+                exec_f2 = true;
+                exec_f3 = true;
+                exec_f4 = true;
+                cur_t2 = std::chrono::system_clock::now();
+            }
+            if (exec_f2 == true){  // publish rate
+                //std::cout << "wait_d: " << wait_d << std::endl;
+                // for camera sync with foxbot_core3.
+                if((camera_sync_cnt % 5) == 0){
+                    // /camera/sync Publish
+                    ros::Time now_tmp = ros::Time::now();
+                    // foxbot_core3 の publish 時刻を、off_fox[ms] だけ、早くする。
+                    if(off_fox > 0.0){
+                        double tx = now_tmp.toSec() - off_fox / 1000.0;
+                        now_tmp.fromSec(tx);
+                    }
+                    camera_sync.header.stamp= now_tmp;
+                    camera_sync.temperature=fs;
+                    camera_sync_publisher.publish(camera_sync);
+
                 }
-                camera_sync.header.stamp= now_tmp;
-                camera_sync.temperature=fs;
-       		    camera_sync_publisher.publish(camera_sync);
-
+                camera_sync_cnt++;
+                exec_f2=false;
             }
-            camera_sync_cnt++;
 
-            double off_x = (double_t)((rgbConverter._wait_d+depthConverter._wait_d)/2/1000000);
-            off_my=0.0;
-            if(off_x > 10.0){
-                off_my = -4.0;
-            }
+            //double off_x = (double_t)((rgbConverter._wait_d+depthConverter._wait_d)/2/1000000);
+            //off_my=0.0;
+            //if(off_x > 10.0){
+            //    off_my = -4.0;
+            //}
             //else if(off_x > 5.0){
             //    off_my = -2.0;
             //}
-            else if(off_x < -10.0){
-                off_my = 4.0;
-            }
+            //else if(off_x < -10.0){
+            //    off_my = 4.0;
+            //}
             //else if(off_x < -5.0){
             //    off_my = 2.0;
             //}
 
             //std::unordered_map<std::string, std::shared_ptr<dai::ImgFrame>> latestPacket;
 
-            first_f = false;
             cur_t = std::chrono::system_clock::now();
 
             bool rgb_f=false;
@@ -341,47 +358,36 @@ int main(int argc, char** argv){
                 }
                 if(rgb_f==false){
                     if(rgb_sp){
-                        //cv::imshow("left", inLeft->getCvFrame());
+                        if (exec_f3 == true){
+                            rgbConverter.toRosMsg(rgb_sp, rgb_img);
 
-                        //std::cout << "+" << std::endl;
-                        //frame[name] = latestPacket[name]->getFrame();
-                        //auto maxDisparity = stereo->initialConfig.getMaxDisparity();
-                        // Optional, extend range 0..95 -> 0..255, for a better visualisation
-                        //if(1) frame[name].convertTo(frame[name], CV_8UC1, 255. / maxDisparity);
-                        // Optional, apply false colorization
-                        //if(1) cv::applyColorMap(frame[name], frame[name], cv::COLORMAP_HOT);
+                            // publish image data
+                            rgb_image_pub.publish(rgb_img);
 
-                        //auto rgb = latestPacket[name];
-                        rgbConverter.toRosMsg(rgb_sp, rgb_img);
-
-                        // publish image data
-                        rgb_image_pub.publish(rgb_img);
-
-                        rgbCameraInfo.header.stamp =rgb_img.header.stamp;
-                        rgbCameraInfo.header.frame_id = rgb_img.header.frame_id;
-                        rgb_cameraInfoPublisher.publish(rgbCameraInfo);
-
-                        rgb_cnt++;
+                            rgbCameraInfo.header.stamp =rgb_img.header.stamp;
+                            rgbCameraInfo.header.frame_id = rgb_img.header.frame_id;
+                            rgb_cameraInfoPublisher.publish(rgbCameraInfo);
+                            exec_f3=false;
+                            rgb_cnt++;
+                        }
                         rgb_f=true;
                         //rgb_sp.~shared_ptr();
                     }
                 }
                 if(depth_f==false){
                     if(depth_sp){
-                        //cv::imshow("left", inLeft->getCvFrame());
+                        if (exec_f4 == true){
+                            depthConverter.toRosMsg(depth_sp, depth_img);
 
-                        //std::cout << "-" << std::endl;
-                        //auto depth = latestPacket[name];
-                        depthConverter.toRosMsg(depth_sp, depth_img);
+                            // publish image data
+                            depth_image_pub.publish(depth_img);
 
-                        // publish image data
-                        depth_image_pub.publish(depth_img);
-
-                        depthCameraInfo.header.stamp =depth_img.header.stamp;
-                        depthCameraInfo.header.frame_id = depth_img.header.frame_id;
-                        depth_cameraInfoPublisher.publish(depthCameraInfo);
-
-                        depth_cnt++;
+                            depthCameraInfo.header.stamp =depth_img.header.stamp;
+                            depthCameraInfo.header.frame_id = depth_img.header.frame_id;
+                            depth_cameraInfoPublisher.publish(depthCameraInfo);
+                            exec_f4 = false;
+                            depth_cnt++;
+                        }
                         depth_f=true;
                         //depth_sp.~shared_ptr();
                     }                    
@@ -391,6 +397,7 @@ int main(int argc, char** argv){
                 }
                 usleep(10);
             }
+            first_f = false;
         }
         if(rgb_cnt >= 30){
             end = std::chrono::system_clock::now();  // 計測終了時間
@@ -408,21 +415,6 @@ int main(int argc, char** argv){
             depth_cnt=0;
             start = std::chrono::system_clock::now();
         }
-        // Blend when both received
-        //if(frame.find(rgbWindowName) != frame.end() && frame.find(depthWindowName) != frame.end()) {
-        //    // Need to have both frames in BGR format before blending
-        //    if(frame[depthWindowName].channels() < 3) {
-        //        cv::cvtColor(frame[depthWindowName], frame[depthWindowName], cv::COLOR_GRAY2BGR);
-        //    }
-        //    cv::Mat blended;
-        //    cv::addWeighted(frame[rgbWindowName], rgbWeight, frame[depthWindowName], depthWeight, 0, blended);
-        //    cv::imshow(blendedWindowName, blended);
-        //    frame.clear();
-        //}
-        //int key = cv::waitKey(1);
-        //if(key == 'q' || key == 'Q') {
-        //    return 0;
-        //}
         if(ros::isShuttingDown()==true){
             break;
         }

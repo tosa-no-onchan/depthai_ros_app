@@ -168,6 +168,7 @@ add_library(${PROJECT_NAME}
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/depthai_ros_app_node.cpp)
 add_executable(rgb_depth src/rgb_depth.cpp)
+#add_executable(rgb_depth_ex src/rgb_depth_ex.cpp)
 add_executable(stereo_depth src/stereo_depth.cpp)
 add_executable(rgb_publisher src/rgb_publisher.cpp)
 add_executable(stereo_publisher src/stereo_publisher.cpp)
@@ -191,6 +192,12 @@ target_link_libraries(rgb_depth
   ${PROJECT_NAME}
   depthai::core
 )
+
+#target_link_libraries(rgb_depth_ex
+#  ${catkin_LIBRARIES}
+#  ${PROJECT_NAME}
+#  depthai::core
+#)
 
 target_link_libraries(stereo_depth
   ${catkin_LIBRARIES}

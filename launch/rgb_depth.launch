@@ -34,7 +34,7 @@
     <arg name="camera_param_uri"  default="package://depthai_examples/params/camera" />
 
     <arg name="odom_off"    default="0" />   <!-- for foxbot_core3 tf publish sync time off set  -->
-    <arg name="rate"    default="15.0" />    <!-- rgb and depth camera fps -->
+    <arg name="rate"    default="16.0" />    <!-- rgb and depth camera fps -->
 
     <arg name="PC" default="false"/>
     <arg name="POINT" default="false"/>

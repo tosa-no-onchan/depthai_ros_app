@@ -27,6 +27,8 @@
 
 #include <depthai_bridge/BridgePublisher.hpp>
 
+//#define USE_CAMERA_SYNC
+
 #define USE_CONV_EX
 #ifndef USE_CONV_EX
 #include <depthai_bridge/ImageConverter.hpp>
@@ -65,14 +67,21 @@ static void updateBlendWeights(int percentRgb, void* ctx) {
 
 int main(int argc, char** argv){
     using namespace std;
-    int odom_off=0;     // foxbot_core3  tf publish timming off set [ms]
-    double rate = FREQUENCY_CAPUTION_HZ;
+    int odom_off=0;                 // foxbot_core3  tf publish timming off set [ms]
+    double rate = FREQUENCY_CAPUTION_HZ;    // own publish rate
+    double rate_ad=0.0;             // foxbot_core publish rate adjust
 
     ros::init(argc, argv, "rgb_depth");
     ros::NodeHandle pnh("~");
 
     pnh.getParam("odom_off", odom_off);
     pnh.getParam("rate", rate);
+    pnh.getParam("rate_ad", rate_ad);
+
+    std::cout << "odom_off:=" << odom_off << std::endl;
+    std::cout << "rate:=" << rate << std::endl;
+    std::cout << "rate_ad:=" << rate_ad << std::endl;
+
 
     image_transport::ImageTransport it(pnh);
     image_transport::Publisher rgb_image_pub = it.advertise("/rgb/image", 1);
@@ -84,12 +93,14 @@ int main(int argc, char** argv){
     rgb_cameraInfoPublisher = pnh.advertise<ImageMsgs::CameraInfo>("/rgb/camera_info",1);
     depth_cameraInfoPublisher = pnh.advertise<ImageMsgs::CameraInfo>("/stereo_publisher/stereo/camera_info",1);
 
+    #ifdef USE_CAMERA_SYNC
     // /camera/sync publisher
     // syncolonize with tf-base_footprint of foxbot_core3. 
     sensor_msgs::Temperature camera_sync;
     //ros::Publisher camera_sync_publisher("/rgb/sync", &camera_sync);
    	//pnh.advertise(&camera_sync_publisher);
     ros::Publisher camera_sync_publisher = pnh.advertise<sensor_msgs::Temperature>("/camera/sync", 1);   
+    #endif
 
     // Create pipeline
     dai::Pipeline pipeline;
@@ -274,16 +285,19 @@ int main(int argc, char** argv){
     cur_t = std::chrono::system_clock::now(); // 計測開始時間
     cur_t2 = std::chrono::system_clock::now(); // 計測開始時間
 
-    bool first_f = true;
     bool exec_f2 = false;
     bool exec_f3 = false;
     bool exec_f4 = false;
 
     double fs=rate;
-    double m_rate=33.0;     // main rate
-    int sleep_nt = (int)(1000.f / rate)/6 * 1000;  // micro sec
-    //int sleep_nt = 10 * 1000;
-    sleep_nt = 3*1000;
+    double fs_ave=rate;
+    double m_rate=33.0;     // main rate [Hz]
+    unsigned int sleep_nt = (unsigned int)((1000000.0 / rate)/6.0) ;  // micro sec
+    //unsigned int sleep_nt = 10 * 1000;
+    //sleep_nt = 3*1000;
+    //sleep_nt = 1*1000;
+    //sleep_nt = 4*1000;
+    sleep_nt = 200;
 
     uint32_t camera_sync_off = 10;  // 10[ms]
 
@@ -293,17 +307,19 @@ int main(int argc, char** argv){
 
     while(true) {
         now_t = std::chrono::system_clock::now(); // 今の時間
-        double wait_d = std::chrono::duration_cast<std::chrono::milliseconds>(now_t-cur_t).count(); //処理に要した時間をミリ秒に変換
-        double wait_d2 = std::chrono::duration_cast<std::chrono::milliseconds>(now_t-cur_t2).count(); //処理に要した時間をミリ秒に変換
+        double wait_d = std::chrono::duration_cast<std::chrono::microseconds>(now_t-cur_t).count(); //処理に要した時間をマイクロ秒に変換
+        double wait_d2 = std::chrono::duration_cast<std::chrono::microseconds>(now_t-cur_t2).count(); //処理に要した時間をマイクロ秒に変換
 
-        //if (wait_d >= ((double)(1000.0 / rate)+off_my) || first_f == true){
-        if (wait_d >= (double)(1000.0 / m_rate) || first_f == true){    // main access rate
-            if (wait_d2 >= (double)(1000.0 / rate) || first_f == true){  // publish rate
+        //if (wait_d >= ((double)(1000.0 / rate)+off_my)){
+        if (wait_d >= (double)(1000000.0 / m_rate)){    // main access rate
+            cur_t = std::chrono::system_clock::now();
+            if (wait_d2 >= (double)(1000000.0 / rate)){  // publish rate
+                cur_t2 = std::chrono::system_clock::now();
                 exec_f2 = true;
                 exec_f3 = true;
                 exec_f4 = true;
-                cur_t2 = std::chrono::system_clock::now();
             }
+            #ifdef USE_CAMERA_SYNC
             if (exec_f2 == true){  // publish rate
                 //std::cout << "wait_d: " << wait_d << std::endl;
                 // for camera sync with foxbot_core3.
@@ -316,14 +332,14 @@ int main(int argc, char** argv){
                         now_tmp.fromSec(tx);
                     }
                     camera_sync.header.stamp= now_tmp;
-                    camera_sync.temperature=fs;
+                    camera_sync.temperature=fs_ave+rate_ad;
                     camera_sync_publisher.publish(camera_sync);
-
                 }
                 camera_sync_cnt++;
                 exec_f2=false;
             }
-
+            #endif
+            
             //double off_x = (double_t)((rgbConverter._wait_d+depthConverter._wait_d)/2/1000000);
             //off_my=0.0;
             //if(off_x > 10.0){
@@ -339,10 +355,6 @@ int main(int argc, char** argv){
             //    off_my = 2.0;
             //}
 
-            //std::unordered_map<std::string, std::shared_ptr<dai::ImgFrame>> latestPacket;
-
-            cur_t = std::chrono::system_clock::now();
-
             bool rgb_f=false;
             bool depth_f=false;
 
@@ -350,8 +362,9 @@ int main(int argc, char** argv){
                 std::shared_ptr<dai::ImgFrame> rgb_sp;
                 std::shared_ptr<dai::ImgFrame> depth_sp;
                 if(rgb_f==false){
-                    rgb_sp = qRgb->tryGet<dai::ImgFrame>();     // if <dai::ImgFrame> is comming,then return <dai::ImgFrame>. 
-                                                                //  from depthai-core/src/device/DataQueue.cpp
+                    // if <dai::ImgFrame> is comming,then return <dai::ImgFrame>.
+                    //  from depthai-core/src/device/DataQueue.cpp
+                    rgb_sp = qRgb->tryGet<dai::ImgFrame>();
                 }
                 if(depth_f==false){
                     depth_sp = qDepth->tryGet<dai::ImgFrame>();
@@ -360,10 +373,8 @@ int main(int argc, char** argv){
                     if(rgb_sp){
                         if (exec_f3 == true){
                             rgbConverter.toRosMsg(rgb_sp, rgb_img);
-
                             // publish image data
                             rgb_image_pub.publish(rgb_img);
-
                             rgbCameraInfo.header.stamp =rgb_img.header.stamp;
                             rgbCameraInfo.header.frame_id = rgb_img.header.frame_id;
                             rgb_cameraInfoPublisher.publish(rgbCameraInfo);
@@ -378,10 +389,8 @@ int main(int argc, char** argv){
                     if(depth_sp){
                         if (exec_f4 == true){
                             depthConverter.toRosMsg(depth_sp, depth_img);
-
                             // publish image data
                             depth_image_pub.publish(depth_img);
-
                             depthCameraInfo.header.stamp =depth_img.header.stamp;
                             depthCameraInfo.header.frame_id = depth_img.header.frame_id;
                             depth_cameraInfoPublisher.publish(depthCameraInfo);
@@ -397,13 +406,14 @@ int main(int argc, char** argv){
                 }
                 usleep(10);
             }
-            first_f = false;
         }
         if(rgb_cnt >= 30){
             end = std::chrono::system_clock::now();  // 計測終了時間
-            double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count(); //処理に要した時間をミリ秒に変換
-            fs = (double)rgb_cnt * 1000.0 / elapsed;
-
+            double elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end-start).count(); //処理に要した時間をマイクロ秒に変換
+            start = std::chrono::system_clock::now();
+            //fs = (double)(rgb_cnt+depth_cnt) / 2.0 * 1000.0 / elapsed;
+            fs = (double)rgb_cnt * 1000000.0 / elapsed;
+            fs_ave = (fs+fs_ave) / 2.0;
             std::cout << rgb_cnt - depth_cnt << std::endl;
 
             std::cout << "rgbConverter._wait_d="<< rgbConverter._wait_d/1000000 << "[ms]"<<  std::endl;
@@ -413,7 +423,6 @@ int main(int argc, char** argv){
             //std::cout << "off_fox="<< off_fox <<  std::endl;
             rgb_cnt=0;
             depth_cnt=0;
-            start = std::chrono::system_clock::now();
         }
         if(ros::isShuttingDown()==true){
             break;

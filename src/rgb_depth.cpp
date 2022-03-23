@@ -29,6 +29,9 @@
 
 //#define USE_CAMERA_SYNC
 
+
+
+
 #define USE_CONV_EX
 #ifndef USE_CONV_EX
 #include <depthai_bridge/ImageConverter.hpp>
@@ -297,7 +300,7 @@ int main(int argc, char** argv){
     //sleep_nt = 3*1000;
     //sleep_nt = 1*1000;
     //sleep_nt = 4*1000;
-    sleep_nt = 200;
+    sleep_nt = 250;
 
     uint32_t camera_sync_off = 10;  // 10[ms]
 

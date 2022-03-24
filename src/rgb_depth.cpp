@@ -29,9 +29,6 @@
 
 //#define USE_CAMERA_SYNC
 
-
-
-
 #define USE_CONV_EX
 #ifndef USE_CONV_EX
 #include <depthai_bridge/ImageConverter.hpp>
@@ -181,7 +178,7 @@ int main(int argc, char** argv){
     //right->setFps(fps);
 
     // StereoDepth
-    #define ORG_USE_2
+    #define ORG_USE_3
     #ifdef ORG_USE_1
     // org from rgb_depth_aligned.cpp
     stereo->setDefaultProfilePreset(dai::node::StereoDepth::PresetMode::HIGH_DENSITY);
@@ -211,14 +208,16 @@ int main(int argc, char** argv){
     stereo->setLeftRightCheck(lrcheck);
     stereo->setExtendedDisparity(extended);
     stereo->setSubpixel(subpixel);
+
+    stereo->setDepthAlign(dai::CameraBoardSocket::RGB);     // 上の指定をまねる。
     #endif
 
     // Linking
     camRgb->isp.link(rgbOut->input);
     left->out.link(stereo->left);
     right->out.link(stereo->right);
-    //stereo->disparity.link(depthOut->input);        // オリジナルの設定
-    stereo->depth.link(depthOut->input);               // こちらを試す。 2022.3.3
+    //stereo->disparity.link(depthOut->input);        // オリジナルの設定 rgb color か?
+    stereo->depth.link(depthOut->input);            // こちらを試す。 2022.3.3 mono 8bit か?
 
     std::cout << "rgb_depth:#5 " << std::endl;
     // Connect to device and start pipeline
@@ -276,8 +275,6 @@ int main(int argc, char** argv){
 
     ImageMsgs::Image depth_img;
     ImageMsgs::Image rgb_img;
-
-    //ros::Rate ratex(15);
 
     int rgb_cnt=0;
     int depth_cnt=0;
@@ -431,9 +428,7 @@ int main(int argc, char** argv){
             break;
         }
         //ros::spinOnce();
-        //ratex.sleep();
         //ros::Duration(0.001).sleep();
-        //int sleep_nt = 10 * 1000;
         usleep(sleep_nt);
     }
     //ros::spin();

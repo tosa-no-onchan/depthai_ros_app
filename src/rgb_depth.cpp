@@ -63,25 +63,24 @@ static void updateBlendWeights(int percentRgb, void* ctx) {
     depthWeight = 1.f - rgbWeight;
 }
 
-#define FREQUENCY_CAPUTION_HZ               16.0f   // 15[hz]
+#define FREQUENCY_CAPUTION_HZ               15   // 15[hz]
 
 int main(int argc, char** argv){
     using namespace std;
     int odom_off=0;                 // foxbot_core3  tf publish timming off set [ms]
-    double rate = FREQUENCY_CAPUTION_HZ;    // own publish rate
+    int rate = FREQUENCY_CAPUTION_HZ;    // own publish rate
     double rate_ad=0.0;             // foxbot_core publish rate adjust
 
     ros::init(argc, argv, "rgb_depth");
     ros::NodeHandle pnh("~");
 
     pnh.getParam("odom_off", odom_off);
-    pnh.getParam("rate", rate);
+    //pnh.getParam("rate", rate);
     pnh.getParam("rate_ad", rate_ad);
 
     std::cout << "odom_off:=" << odom_off << std::endl;
     std::cout << "rate:=" << rate << std::endl;
     std::cout << "rate_ad:=" << rate_ad << std::endl;
-
 
     image_transport::ImageTransport it(pnh);
     image_transport::Publisher rgb_image_pub = it.advertise("/rgb/image", 1);
@@ -161,7 +160,7 @@ int main(int argc, char** argv){
     camRgb->setBoardSocket(dai::CameraBoardSocket::RGB);
     //camRgb->setPreviewSize(300, 300);       // 試し。 2022.3.3 by nishi
     camRgb->setResolution(dai::ColorCameraProperties::SensorResolution::THE_1080_P);
-    //camRgb->setFps(fps);
+    camRgb->setFps(rate);
 
     //if(downscaleColor) camRgb->setIspScale(2, 3);
     //if(downscaleColor) camRgb->setIspScale(1, 3);       // width 640 height 360
@@ -175,7 +174,7 @@ int main(int argc, char** argv){
     //left->setFps(fps);
     right->setResolution(monoRes);
     right->setBoardSocket(dai::CameraBoardSocket::RIGHT);
-    //right->setFps(fps);
+    right->setFps(rate);
 
     // StereoDepth
     #define ORG_USE_3
@@ -216,8 +215,8 @@ int main(int argc, char** argv){
     camRgb->isp.link(rgbOut->input);
     left->out.link(stereo->left);
     right->out.link(stereo->right);
-    //stereo->disparity.link(depthOut->input);        // オリジナルの設定 rgb color か?
-    stereo->depth.link(depthOut->input);            // こちらを試す。 2022.3.3 mono 8bit か?
+    //stereo->disparity.link(depthOut->input);        // オリジナルの設定
+    stereo->depth.link(depthOut->input);               // こちらを試す。 2022.3.3
 
     std::cout << "rgb_depth:#5 " << std::endl;
     // Connect to device and start pipeline
@@ -278,135 +277,42 @@ int main(int argc, char** argv){
 
     int rgb_cnt=0;
     int depth_cnt=0;
-    u_int32_t camera_sync_cnt=0;
 
-    std::chrono::system_clock::time_point  start, end, cur_t,cur_t2,now_t; // 型は auto で可
+    std::chrono::system_clock::time_point  start, end; // 型は auto で可
     start = std::chrono::system_clock::now(); // 計測開始時間
-    cur_t = std::chrono::system_clock::now(); // 計測開始時間
-    cur_t2 = std::chrono::system_clock::now(); // 計測開始時間
 
-    bool exec_f2 = false;
-    bool exec_f3 = false;
-    bool exec_f4 = false;
-
-    double fs=rate;
-    double fs_ave=rate;
-    double m_rate=33.0;     // main rate [Hz]
-    unsigned int sleep_nt = (unsigned int)((1000000.0 / rate)/6.0) ;  // micro sec
+    double fs=(double)rate;
+    double fs_ave=(double)rate;
+    //unsigned int sleep_nt = (unsigned int)((1000000.0 / rate)/6.0) ;  // micro sec
     //unsigned int sleep_nt = 10 * 1000;
     //sleep_nt = 3*1000;
     //sleep_nt = 1*1000;
     //sleep_nt = 4*1000;
-    sleep_nt = 250;
-
-    uint32_t camera_sync_off = 10;  // 10[ms]
-
-    // foxbot_core3 の publish 時刻を、rgb カメラの、キャプション時刻より、off_fox[ms] 早くする。
-    double off_fox = (double)odom_off;    // [ms]
-    double off_my=0.0;
+    unsigned int sleep_nt = 40*1000;    // 40[ms]
 
     while(true) {
-        now_t = std::chrono::system_clock::now(); // 今の時間
-        double wait_d = std::chrono::duration_cast<std::chrono::microseconds>(now_t-cur_t).count(); //処理に要した時間をマイクロ秒に変換
-        double wait_d2 = std::chrono::duration_cast<std::chrono::microseconds>(now_t-cur_t2).count(); //処理に要した時間をマイクロ秒に変換
+        std::shared_ptr<dai::ImgFrame> rgb_sp;
+        std::shared_ptr<dai::ImgFrame> depth_sp;
 
-        //if (wait_d >= ((double)(1000.0 / rate)+off_my)){
-        if (wait_d >= (double)(1000000.0 / m_rate)){    // main access rate
-            cur_t = std::chrono::system_clock::now();
-            if (wait_d2 >= (double)(1000000.0 / rate)){  // publish rate
-                cur_t2 = std::chrono::system_clock::now();
-                exec_f2 = true;
-                exec_f3 = true;
-                exec_f4 = true;
-            }
-            #ifdef USE_CAMERA_SYNC
-            if (exec_f2 == true){  // publish rate
-                //std::cout << "wait_d: " << wait_d << std::endl;
-                // for camera sync with foxbot_core3.
-                if((camera_sync_cnt % 5) == 0){
-                    // /camera/sync Publish
-                    ros::Time now_tmp = ros::Time::now();
-                    // foxbot_core3 の publish 時刻を、off_fox[ms] だけ、早くする。
-                    if(off_fox > 0.0){
-                        double tx = now_tmp.toSec() - off_fox / 1000.0;
-                        now_tmp.fromSec(tx);
-                    }
-                    camera_sync.header.stamp= now_tmp;
-                    camera_sync.temperature=fs_ave+rate_ad;
-                    camera_sync_publisher.publish(camera_sync);
-                }
-                camera_sync_cnt++;
-                exec_f2=false;
-            }
-            #endif
-            
-            //double off_x = (double_t)((rgbConverter._wait_d+depthConverter._wait_d)/2/1000000);
-            //off_my=0.0;
-            //if(off_x > 10.0){
-            //    off_my = -4.0;
-            //}
-            //else if(off_x > 5.0){
-            //    off_my = -2.0;
-            //}
-            //else if(off_x < -10.0){
-            //    off_my = 4.0;
-            //}
-            //else if(off_x < -5.0){
-            //    off_my = 2.0;
-            //}
+        rgb_sp = qRgb->get<dai::ImgFrame>();
+        depth_sp = qDepth->get<dai::ImgFrame>();
 
-            bool rgb_f=false;
-            bool depth_f=false;
+        rgbConverter.toRosMsg(rgb_sp, rgb_img);
+        // publish image data
+        rgb_image_pub.publish(rgb_img);
+        rgbCameraInfo.header.stamp =rgb_img.header.stamp;
+        rgbCameraInfo.header.frame_id = rgb_img.header.frame_id;
+        rgb_cameraInfoPublisher.publish(rgbCameraInfo);
+        rgb_cnt++;
 
-            while(true){
-                std::shared_ptr<dai::ImgFrame> rgb_sp;
-                std::shared_ptr<dai::ImgFrame> depth_sp;
-                if(rgb_f==false){
-                    // if <dai::ImgFrame> is comming,then return <dai::ImgFrame>.
-                    //  from depthai-core/src/device/DataQueue.cpp
-                    rgb_sp = qRgb->tryGet<dai::ImgFrame>();
-                }
-                if(depth_f==false){
-                    depth_sp = qDepth->tryGet<dai::ImgFrame>();
-                }
-                if(rgb_f==false){
-                    if(rgb_sp){
-                        if (exec_f3 == true){
-                            rgbConverter.toRosMsg(rgb_sp, rgb_img);
-                            // publish image data
-                            rgb_image_pub.publish(rgb_img);
-                            rgbCameraInfo.header.stamp =rgb_img.header.stamp;
-                            rgbCameraInfo.header.frame_id = rgb_img.header.frame_id;
-                            rgb_cameraInfoPublisher.publish(rgbCameraInfo);
-                            exec_f3=false;
-                            rgb_cnt++;
-                        }
-                        rgb_f=true;
-                        //rgb_sp.~shared_ptr();
-                    }
-                }
-                if(depth_f==false){
-                    if(depth_sp){
-                        if (exec_f4 == true){
-                            depthConverter.toRosMsg(depth_sp, depth_img);
-                            // publish image data
-                            depth_image_pub.publish(depth_img);
-                            depthCameraInfo.header.stamp =depth_img.header.stamp;
-                            depthCameraInfo.header.frame_id = depth_img.header.frame_id;
-                            depth_cameraInfoPublisher.publish(depthCameraInfo);
-                            exec_f4 = false;
-                            depth_cnt++;
-                        }
-                        depth_f=true;
-                        //depth_sp.~shared_ptr();
-                    }                    
-                }
-                if(rgb_f != false && depth_f != false){
-                    break;
-                }
-                usleep(10);
-            }
-        }
+        depthConverter.toRosMsg(depth_sp, depth_img);
+        // publish image data
+        depth_image_pub.publish(depth_img);
+        depthCameraInfo.header.stamp =depth_img.header.stamp;
+        depthCameraInfo.header.frame_id = depth_img.header.frame_id;
+        depth_cameraInfoPublisher.publish(depthCameraInfo);
+        depth_cnt++;
+
         if(rgb_cnt >= 30){
             end = std::chrono::system_clock::now();  // 計測終了時間
             double elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end-start).count(); //処理に要した時間をマイクロ秒に変換
@@ -428,7 +334,9 @@ int main(int argc, char** argv){
             break;
         }
         //ros::spinOnce();
+        //ratex.sleep();
         //ros::Duration(0.001).sleep();
+        //int sleep_nt = 10 * 1000;
         usleep(sleep_nt);
     }
     //ros::spin();

@@ -46,8 +46,8 @@ namespace ImageMsgs = sensor_msgs;
 // Optional. If set (true), the ColorCamera is downscaled from 1080p to 720p.
 // Otherwise (false), the aligned depth is automatically upscaled to 1080p
 static std::atomic<bool> downscaleColor{true};
-//static constexpr int fps = 30;
-static constexpr int fps = 15;
+static constexpr int fps = 30;
+//static constexpr int fps = 15;
 // The disparity is computed at this resolution, then upscaled to RGB resolution
 static constexpr auto monoRes = dai::MonoCameraProperties::SensorResolution::THE_400_P;
 
@@ -63,7 +63,7 @@ static void updateBlendWeights(int percentRgb, void* ctx) {
     depthWeight = 1.f - rgbWeight;
 }
 
-#define FREQUENCY_CAPUTION_HZ               15   // 15[hz]
+#define FREQUENCY_CAPUTION_HZ               30   // 15[hz]
 
 int main(int argc, char** argv){
     using namespace std;
@@ -171,7 +171,7 @@ int main(int argc, char** argv){
 
     left->setResolution(monoRes);
     left->setBoardSocket(dai::CameraBoardSocket::LEFT);
-    //left->setFps(fps);
+    left->setFps(rate);
     right->setResolution(monoRes);
     right->setBoardSocket(dai::CameraBoardSocket::RIGHT);
     right->setFps(rate);
@@ -284,11 +284,13 @@ int main(int argc, char** argv){
     double fs=(double)rate;
     double fs_ave=(double)rate;
     //unsigned int sleep_nt = (unsigned int)((1000000.0 / rate)/6.0) ;  // micro sec
-    //unsigned int sleep_nt = 10 * 1000;
+    unsigned int sleep_nt = 15*1000;
     //sleep_nt = 3*1000;
     //sleep_nt = 1*1000;
     //sleep_nt = 4*1000;
-    unsigned int sleep_nt = 40*1000;    // 40[ms]
+    //unsigned int sleep_nt = 40*1000;    // 40[ms]
+
+    int sw=0;
 
     while(true) {
         std::shared_ptr<dai::ImgFrame> rgb_sp;
@@ -296,22 +298,26 @@ int main(int argc, char** argv){
 
         rgb_sp = qRgb->get<dai::ImgFrame>();
         depth_sp = qDepth->get<dai::ImgFrame>();
+        sw++;
 
-        rgbConverter.toRosMsg(rgb_sp, rgb_img);
-        // publish image data
-        rgb_image_pub.publish(rgb_img);
-        rgbCameraInfo.header.stamp =rgb_img.header.stamp;
-        rgbCameraInfo.header.frame_id = rgb_img.header.frame_id;
-        rgb_cameraInfoPublisher.publish(rgbCameraInfo);
-        rgb_cnt++;
+        if(sw>=2){
+            rgbConverter.toRosMsg(rgb_sp, rgb_img);
+            // publish image data
+            rgb_image_pub.publish(rgb_img);
+            rgbCameraInfo.header.stamp =rgb_img.header.stamp;
+            rgbCameraInfo.header.frame_id = rgb_img.header.frame_id;
+            rgb_cameraInfoPublisher.publish(rgbCameraInfo);
+            rgb_cnt++;
 
-        depthConverter.toRosMsg(depth_sp, depth_img);
-        // publish image data
-        depth_image_pub.publish(depth_img);
-        depthCameraInfo.header.stamp =depth_img.header.stamp;
-        depthCameraInfo.header.frame_id = depth_img.header.frame_id;
-        depth_cameraInfoPublisher.publish(depthCameraInfo);
-        depth_cnt++;
+            depthConverter.toRosMsg(depth_sp, depth_img);
+            // publish image data
+            depth_image_pub.publish(depth_img);
+            depthCameraInfo.header.stamp =depth_img.header.stamp;
+            depthCameraInfo.header.frame_id = depth_img.header.frame_id;
+            depth_cameraInfoPublisher.publish(depthCameraInfo);
+            depth_cnt++;
+            sw=0;
+        }
 
         if(rgb_cnt >= 30){
             end = std::chrono::system_clock::now();  // 計測終了時間

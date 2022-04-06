@@ -48,6 +48,7 @@ class ImageConverter_ex : public dai::rosBridge::ImageConverter {
     ImageConverter_ex(const std::string frameName, bool interleaved);
 
     void toRosMsg(std::shared_ptr<dai::ImgFrame> inData, ImageMsgs::Image& outImageMsg);
+    void AData2RosMsg(std::shared_ptr<dai::ADatatype> aData, ImageMsgs::Image& outImageMsg);
     //ImagePtr toRosMsgPtr(std::shared_ptr<dai::ImgFrame> inData);
 
     //void toDaiMsg(const ImageMsgs::Image& inMsg, dai::ImgFrame& outData);

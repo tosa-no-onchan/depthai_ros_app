@@ -46,7 +46,7 @@ namespace ImageMsgs = sensor_msgs;
 // Optional. If set (true), the ColorCamera is downscaled from 1080p to 720p.
 // Otherwise (false), the aligned depth is automatically upscaled to 1080p
 static std::atomic<bool> downscaleColor{true};
-static constexpr int fps = 30;
+//static constexpr int fps = 30;
 //static constexpr int fps = 15;
 // The disparity is computed at this resolution, then upscaled to RGB resolution
 static constexpr auto monoRes = dai::MonoCameraProperties::SensorResolution::THE_400_P;
@@ -69,18 +69,21 @@ int main(int argc, char** argv){
     using namespace std;
     int odom_off=0;                 // foxbot_core3  tf publish timming off set [ms]
     int rate = FREQUENCY_CAPUTION_HZ;    // own publish rate
-    double rate_ad=0.0;             // foxbot_core publish rate adjust
+
+    int LRchecktresh = 5;
+    int confidence = 200;
 
     ros::init(argc, argv, "rgb_depth");
     ros::NodeHandle pnh("~");
 
-    pnh.getParam("odom_off", odom_off);
     //pnh.getParam("rate", rate);
-    pnh.getParam("rate_ad", rate_ad);
 
-    std::cout << "odom_off:=" << odom_off << std::endl;
+    pnh.getParam("LRchecktresh", LRchecktresh);
+    pnh.getParam("confidence", confidence);
+
     std::cout << "rate:=" << rate << std::endl;
-    std::cout << "rate_ad:=" << rate_ad << std::endl;
+    std::cout << "LRchecktresh:=" << LRchecktresh << std::endl;
+    std::cout << "confidence:=" << confidence << std::endl;
 
     image_transport::ImageTransport it(pnh);
     image_transport::Publisher rgb_image_pub = it.advertise("/rgb/image", 1);
@@ -107,9 +110,6 @@ int main(int argc, char** argv){
 
     std::string tfPrefix="oak";
     string resolution = "400p";
-
-    int LRchecktresh = 5;
-    int confidence = 200;
 
     dai::node::MonoCamera::Properties::SensorResolution monoResolution;
 
@@ -293,15 +293,16 @@ int main(int argc, char** argv){
     int sw=0;
 
     while(true) {
-        std::shared_ptr<dai::ImgFrame> rgb_sp;
-        std::shared_ptr<dai::ImgFrame> depth_sp;
+        std::shared_ptr<dai::ADatatype> rgb_sp;
+        std::shared_ptr<dai::ADatatype> depth_sp;
 
-        rgb_sp = qRgb->get<dai::ImgFrame>();
-        depth_sp = qDepth->get<dai::ImgFrame>();
+        rgb_sp = qRgb->get<dai::ADatatype>();
+        depth_sp = qDepth->get<dai::ADatatype>();
         sw++;
 
         if(sw>=2){
-            rgbConverter.toRosMsg(rgb_sp, rgb_img);
+            //rgbConverter.toRosMsg(rgb_sp, rgb_img);
+            rgbConverter.AData2RosMsg(rgb_sp, rgb_img);
             // publish image data
             rgb_image_pub.publish(rgb_img);
             rgbCameraInfo.header.stamp =rgb_img.header.stamp;
@@ -309,7 +310,8 @@ int main(int argc, char** argv){
             rgb_cameraInfoPublisher.publish(rgbCameraInfo);
             rgb_cnt++;
 
-            depthConverter.toRosMsg(depth_sp, depth_img);
+            //depthConverter.toRosMsg(depth_sp, depth_img);
+            depthConverter.AData2RosMsg(depth_sp, depth_img);
             // publish image data
             depth_image_pub.publish(depth_img);
             depthCameraInfo.header.stamp =depth_img.header.stamp;

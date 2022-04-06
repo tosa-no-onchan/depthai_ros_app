@@ -49,6 +49,12 @@ class ImageConverter_ex : public dai::rosBridge::ImageConverter {
 
     void toRosMsg(std::shared_ptr<dai::ImgFrame> inData, ImageMsgs::Image& outImageMsg);
     void AData2RosMsg(std::shared_ptr<dai::ADatatype> aData, ImageMsgs::Image& outImageMsg);
+
+    /**
+     * Retrieves image timestamp related to dai::Clock::now()
+     */
+    std::chrono::time_point<std::chrono::steady_clock, std::chrono::steady_clock::duration> getTimestamp(RawImgFrame& img);
+
     //ImagePtr toRosMsgPtr(std::shared_ptr<dai::ImgFrame> inData);
 
     //void toDaiMsg(const ImageMsgs::Image& inMsg, dai::ImgFrame& outData);
@@ -82,6 +88,7 @@ class ImageConverter_ex : public dai::rosBridge::ImageConverter {
     uint32_t _step;
     uint32_t _inData_height;
     uint32_t _inData_width;
+
 
     //void planarToInterleaved(const std::vector<uint8_t>& srcData, std::vector<uint8_t>& destData, int w, int h, int numPlanes, int bpp);
     //void interleavedToPlanar(const std::vector<uint8_t>& srcData, std::vector<uint8_t>& destData, int w, int h, int numPlanes, int bpp);

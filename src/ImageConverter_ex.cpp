@@ -41,6 +41,14 @@ ImageConverter_ex::ImageConverter_ex(const std::string frameName, bool interleav
     _ftype=0;
 }
 
+
+// getters
+std::chrono::time_point<std::chrono::steady_clock, std::chrono::steady_clock::duration> ImageConverter_ex::getTimestamp(RawImgFrame& img) {
+    using namespace std::chrono;
+    return time_point<steady_clock, steady_clock::duration>{seconds(img.ts.sec) + nanoseconds(img.ts.nsec)};
+}
+
+
 void ImageConverter_ex::toRosMsg(std::shared_ptr<dai::ImgFrame> inData, ImageMsgs::Image& outImageMsg) {
     auto tstamp = inData->getTimestamp();
 
@@ -178,10 +186,15 @@ void ImageConverter_ex::toRosMsg(std::shared_ptr<dai::ImgFrame> inData, ImageMsg
 }
 
 void ImageConverter_ex::AData2RosMsg(std::shared_ptr<dai::ADatatype> aData, ImageMsgs::Image& outImageMsg){
-    std::shared_ptr<dai::ImgFrame> inData = std::dynamic_pointer_cast<dai::ImgFrame>(aData);
+    //std::shared_ptr<dai::ImgFrame> inData = std::dynamic_pointer_cast<dai::ImgFrame>(aData);
     //aData.reset();
 
-    auto tstamp = inData->getTimestamp();
+    std::shared_ptr<RawBuffer> bp = aData->getRaw();
+    RawImgFrame& img = *dynamic_cast<RawImgFrame*>(bp.get());
+
+    //auto tstamp = inData->getTimestamp();
+    auto tstamp = getTimestamp(img);
+    //std::chrono::time_point tstamp = std::chrono::time_point<std::chrono::steady_clock, std::chrono::steady_clock::duration>{seconds(img.ts.sec) + nanoseconds(img.ts.nsec)};
 
     StdMsgs::Header header;
     header.frame_id = _frameName;
@@ -205,19 +218,25 @@ void ImageConverter_ex::AData2RosMsg(std::shared_ptr<dai::ADatatype> aData, Imag
     long int nsec = rosNow.toNSec() - diffTime.count();
     auto rosStamp = rosNow.fromNSec(nsec);
     header.stamp = rosStamp;
-    header.seq = inData->getSequenceNum();
+    //header.seq = inData->getSequenceNum();
+    header.seq = img.sequenceNum;
 #endif
     if(_ftype==0){
-        if(planarEncodingEnumMap.find(inData->getType()) != planarEncodingEnumMap.end()) {
-            switch(inData->getType()) {
+        //if(planarEncodingEnumMap.find(inData->getType()) != planarEncodingEnumMap.end()) {
+        if(planarEncodingEnumMap.find(img.fb.type) != planarEncodingEnumMap.end()) {
+
+            //switch(inData->getType()) {
+            switch(img.fb.type) {
                 case dai::RawImgFrame::Type::BGR888p:
                 case dai::RawImgFrame::Type::RGB888p:
-                    _size = cv::Size(inData->getWidth(), inData->getHeight());
+                    //_size = cv::Size(inData->getWidth(), inData->getHeight());
+                    _size = cv::Size(img.fb.width, img.fb.height);
                     _type = CV_8UC3;
                     break;
                 case dai::RawImgFrame::Type::YUV420p:
                 case dai::RawImgFrame::Type::NV12:
-                    _size = cv::Size(inData->getWidth(), inData->getHeight() * 3 / 2);
+                    //_size = cv::Size(inData->getWidth(), inData->getHeight() * 3 / 2);
+                    _size = cv::Size(img.fb.width, img.fb.height * 3 / 2);
                     _type = CV_8UC1;
                     break;
 
@@ -227,15 +246,18 @@ void ImageConverter_ex::AData2RosMsg(std::shared_ptr<dai::ADatatype> aData, Imag
             }
             _ftype=1;
         } 
-        else if(encodingEnumMap.find(inData->getType()) != encodingEnumMap.end()) {
-            //std::string temp_str(encodingEnumMap[inData->getType()]);
-            _temp_str=encodingEnumMap[inData->getType()];
-            //outImageMsg.height = inData->getHeight();
-            _inData_height = inData->getHeight();
-            //outImageMsg.width = inData->getWidth();
-            _inData_width = inData->getWidth();
-            //outImageMsg.step = inData->getData().size() / inData->getHeight();
-            _step = inData->getData().size() / inData->getHeight();
+        //else if(encodingEnumMap.find(inData->getType()) != encodingEnumMap.end()) {
+        else if(encodingEnumMap.find(img.fb.type) != encodingEnumMap.end()) {
+            //_temp_str=encodingEnumMap[inData->getType()];
+            _temp_str=encodingEnumMap[img.fb.type];
+            //_inData_height = inData->getHeight();
+            _inData_height = img.fb.height;
+            //_inData_width = inData->getWidth();
+            _inData_width = img.fb.width;
+            //_step = inData->getData().size() / inData->getHeight();
+            _step = bp->data.size() / img.fb.height;
+
+
             _ftype=2;
         }
         else{
@@ -250,36 +272,46 @@ void ImageConverter_ex::AData2RosMsg(std::shared_ptr<dai::ADatatype> aData, Imag
         //int type = 0;
         std::vector<cv::Mat> channels;
 
-        switch(inData->getType()) {
+        //switch(inData->getType()) {
+        switch(img.fb.type) {
             case dai::RawImgFrame::Type::RGB888p:
                 // RGB
-                channels.push_back(cv::Mat(_size, CV_8UC1, inData->getData().data() + _size.area() * 2));
-                channels.push_back(cv::Mat(_size, CV_8UC1, inData->getData().data() + _size.area() * 1));
-                channels.push_back(cv::Mat(_size, CV_8UC1, inData->getData().data() + _size.area() * 0));
+                //channels.push_back(cv::Mat(_size, CV_8UC1, inData->getData().data() + _size.area() * 2));
+                channels.push_back(cv::Mat(_size, CV_8UC1, bp->data.data() + _size.area() * 2));
+                //channels.push_back(cv::Mat(_size, CV_8UC1, inData->getData().data() + _size.area() * 1));
+                channels.push_back(cv::Mat(_size, CV_8UC1, bp->data.data() + _size.area() * 1));
+                //channels.push_back(cv::Mat(_size, CV_8UC1, inData->getData().data() + _size.area() * 0));
+                channels.push_back(cv::Mat(_size, CV_8UC1, bp->data.data() + _size.area() * 0));
                 cv::merge(channels, output);
                 break;
 
             case dai::RawImgFrame::Type::BGR888p: 
                 // BGR
-                channels.push_back(cv::Mat(_size, CV_8UC1, inData->getData().data() + _size.area() * 0));
-                channels.push_back(cv::Mat(_size, CV_8UC1, inData->getData().data() + _size.area() * 1));
-                channels.push_back(cv::Mat(_size, CV_8UC1, inData->getData().data() + _size.area() * 2));
+                //channels.push_back(cv::Mat(_size, CV_8UC1, inData->getData().data() + _size.area() * 0));
+                channels.push_back(cv::Mat(_size, CV_8UC1, bp->data.data() + _size.area() * 0));
+                //channels.push_back(cv::Mat(_size, CV_8UC1, inData->getData().data() + _size.area() * 1));
+                channels.push_back(cv::Mat(_size, CV_8UC1, bp->data.data() + _size.area() * 1));
+                //channels.push_back(cv::Mat(_size, CV_8UC1, inData->getData().data() + _size.area() * 2));
+                channels.push_back(cv::Mat(_size, CV_8UC1, bp->data.data() + _size.area() * 2));
                 cv::merge(channels, output);
                 break;
 
             case dai::RawImgFrame::Type::YUV420p:       // Center RGB Camera
-                mat = cv::Mat(_size, _type, inData->getData().data());
+                //mat = cv::Mat(_size, _type, inData->getData().data());
+                mat = cv::Mat(_size, _type, bp->data.data());
                 cv::cvtColor(mat, output, cv::ColorConversionCodes::COLOR_YUV2BGR_IYUV);
                 break;
 
             case dai::RawImgFrame::Type::NV12:
-                mat = cv::Mat(_size, _type, inData->getData().data());
+                //mat = cv::Mat(_size, _type, inData->getData().data());
+                mat = cv::Mat(_size, _type, bp->data.data());
                 cv::cvtColor(mat, output, cv::ColorConversionCodes::COLOR_YUV2BGR_NV12);
                 break;
 
             default:
                 //output = mat.clone();
-                output = cv::Mat(_size, _type, inData->getData().data());
+                //output = cv::Mat(_size, _type, inData->getData().data());
+                output = cv::Mat(_size, _type, bp->data.data());
                 break;
         }
         cv_bridge::CvImage(header, sensor_msgs::image_encodings::BGR8, output).toImageMsg(outImageMsg);        
@@ -301,12 +333,14 @@ void ImageConverter_ex::AData2RosMsg(std::shared_ptr<dai::ADatatype> aData, Imag
         else
             outImageMsg.is_bigendian = true;
 
-        size_t size = inData->getData().size();
+        //size_t size = inData->getData().size();
+        size_t size = bp->data.size();
         if(outImageMsg.data.size() != size){
             outImageMsg.data.resize(size);
         }
         unsigned char* imageMsgDataPtr = reinterpret_cast<unsigned char*>(&outImageMsg.data[0]);
-        unsigned char* daiImgData = reinterpret_cast<unsigned char*>(inData->getData().data());
+        //unsigned char* daiImgData = reinterpret_cast<unsigned char*>(inData->getData().data());
+        unsigned char* daiImgData = reinterpret_cast<unsigned char*>(bp->data.data());
 
         // TODO(Sachin): Try using assign since it is a vector
         // img->data.assign(packet.data->cbegin(), packet.data->cend());

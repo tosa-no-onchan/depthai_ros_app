@@ -1,5 +1,5 @@
 /*
-*
+* stereo_depth.cpp
 * reffer
 * https://sy-base.com/myrobotics/ros/ros_cvbridge/
 */
@@ -22,7 +22,6 @@
 #include "depthai_ros_app/ImageConverter_ex.hpp"
 //#include <depthai_bridge/DisparityConverter.hpp>
 #include <image_transport/image_transport.h>
-
 
 // for time
 //#include <iostream>
@@ -143,10 +142,12 @@ int main(int argc, char** argv){
     auto xoutRectifR = pipeline.create<dai::node::XLinkOut>();
 
     monoLeft->setResolution(monoResolution);
+    monoLeft->setBoardSocket(dai::CameraBoardSocket::LEFT);
     monoLeft->setFps(rate);
     //monoLeft->setFps(15);
 
     monoRight->setResolution(monoResolution);
+    monoRight->setBoardSocket(dai::CameraBoardSocket::RIGHT);
     monoRight->setFps(rate);
     //monoRight->setFps(15);
 
@@ -258,22 +259,24 @@ int main(int argc, char** argv){
     std::chrono::system_clock::time_point  start, end; // 型は auto で可
     start = std::chrono::system_clock::now(); // 計測開始時間
 
-    unsigned int sleep_nt = 17*1000;    // 17[ms]
+    unsigned int sleep_nt = 25*1000;    // 17[ms]
+
+    int sw=0;
 
     while(true) {
-        std::shared_ptr<dai::ImgFrame> disparity;
-        std::shared_ptr<dai::ImgFrame> rectifL;
-        std::shared_ptr<dai::ImgFrame> rectifR;
-        std::shared_ptr<dai::ImgFrame> depth;
+        std::shared_ptr<dai::ADatatype> disparity;
+        std::shared_ptr<dai::ADatatype> rectifL;
+        std::shared_ptr<dai::ADatatype> rectifR;
+        std::shared_ptr<dai::ADatatype> depth;
 
         #ifdef PUB_IMG
-        std::shared_ptr<dai::ImgFrame> left;
-        std::shared_ptr<dai::ImgFrame> right;
+        std::shared_ptr<dai::ADatatype> left;
+        std::shared_ptr<dai::ADatatype> right;
         // left Mono image get
-        left = leftQueue->get<dai::ImgFrame>();
+        left = leftQueue->get<dai::ADatatype>();
         //cv::imshow("left", left->getFrame());
         // right Mono image get
-        right = rightQueue->get<dai::ImgFrame>();
+        right = rightQueue->get<dai::ADatatype>();
         //cv::imshow("right", right->getFrame());
         #endif
 
@@ -281,76 +284,80 @@ int main(int argc, char** argv){
             // Note: in some configurations (if depth is enabled), disparity may output garbage data
             //disparity = dispQueue->get<dai::ImgFrame>();
             if(outputRectified) {
-                rectifL = rectifLeftQueue->get<dai::ImgFrame>();
-                rectifR = rectifRightQueue->get<dai::ImgFrame>();
+                rectifL = rectifLeftQueue->get<dai::ADatatype>();
+                rectifR = rectifRightQueue->get<dai::ADatatype>();
             }
             if(outputDepth) {
-                depth = depthQueue->get<dai::ImgFrame>();
+                depth = depthQueue->get<dai::ADatatype>();
             }
         }
-        #ifdef PUB_IMG
-        //convert left dai::ImgFrame to sensor_msgs/Image
-        leftConverter.toRosMsg(left, left_img);
-        //convert right dai::ImgFrame to sensor_msgs/Image
-        rightConverter.toRosMsg(right, right_img);
+        sw++;
+        if(sw>=2){
+            #ifdef PUB_IMG
+            //convert left dai::ImgFrame to sensor_msgs/Image
+            leftConverter.AData2RosMsg(left, left_img);
+            //convert right dai::ImgFrame to sensor_msgs/Image
+            rightConverter.AData2RosMsg(right, right_img);
 
-        // publish image data
-        //left_image_pub.publish(left_img);
-        //right_image_pub.publish(right_img);
+            // publish image data
+            //left_image_pub.publish(left_img);
+            //right_image_pub.publish(right_img);
 
-        pub_sub(left_img, &left_image_pub, leftCameraInfo, &left_cameraInfoPublisher);
-        pub_sub(right_img, &right_image_pub, rightCameraInfo, &right_cameraInfoPublisher);
-        right_cnt++;
+            pub_sub(left_img, &left_image_pub, leftCameraInfo, &left_cameraInfoPublisher);
+            pub_sub(right_img, &right_image_pub, rightCameraInfo, &right_cameraInfoPublisher);
+            right_cnt++;
 
-        // publish camera info
-        //leftCameraInfo.header.stamp = left_img.header.stamp;
-        //leftCameraInfo.header.frame_id = left_img.header.frame_id;
-        //left_cameraInfoPublisher.publish(leftCameraInfo);
-        //rightCameraInfo.header.stamp =right_img.header.stamp;
-        //rightCameraInfo.header.frame_id = right_img.header.frame_id;
-        //right_cameraInfoPublisher.publish(rightCameraInfo);
-        #endif
+            // publish camera info
+            //leftCameraInfo.header.stamp = left_img.header.stamp;
+            //leftCameraInfo.header.frame_id = left_img.header.frame_id;
+            //left_cameraInfoPublisher.publish(leftCameraInfo);
+            //rightCameraInfo.header.stamp =right_img.header.stamp;
+            //rightCameraInfo.header.frame_id = right_img.header.frame_id;
+            //right_cameraInfoPublisher.publish(rightCameraInfo);
+            #endif
 
-        if(withDepth) {
-            // Note: in some configurations (if depth is enabled), disparity may output garbage data
-            //auto disparity = dispQueue->get<dai::ImgFrame>();
-            //cv::Mat disp(disparity->getCvFrame());
-            //disp.convertTo(disp, CV_8UC1, disparityMultiplier);  // Extend disparity range
-            //cv::imshow("disparity", disp);
-            //cv::Mat disp_color;
-            //cv::applyColorMap(disp, disp_color, cv::COLORMAP_JET);
-            //cv::imshow("disparity_color", disp_color);
+            if(withDepth) {
+                // Note: in some configurations (if depth is enabled), disparity may output garbage data
+                //auto disparity = dispQueue->get<dai::ImgFrame>();
+                //cv::Mat disp(disparity->getCvFrame());
+                //disp.convertTo(disp, CV_8UC1, disparityMultiplier);  // Extend disparity range
+                //cv::imshow("disparity", disp);
+                //cv::Mat disp_color;
+                //cv::applyColorMap(disp, disp_color, cv::COLORMAP_JET);
+                //cv::imshow("disparity_color", disp_color);
 
-            if(outputDepth) {
-                //auto depth = depthQueue->get<dai::ImgFrame>();
-                //cv::imshow("depth", depth->getCvFrame());
-                if(depth != nullptr){
-                    depth_cnt++;
-                    depthConverter.toRosMsg(depth, depth_img);
-                    depth_image_pub.publish(depth_img);
+                if(outputDepth) {
+                    //auto depth = depthQueue->get<dai::ImgFrame>();
+                    //cv::imshow("depth", depth->getCvFrame());
+                    if(depth != nullptr){
+                        depth_cnt++;
+                        depthConverter.AData2RosMsg(depth, depth_img);
+                        depth_image_pub.publish(depth_img);
 
-                    rightCameraInfo.header.stamp = depth_img.header.stamp;
-                    rightCameraInfo.header.frame_id = depth_img.header.frame_id;
-                    depth_cameraInfoPublisher.publish(rightCameraInfo);
+                        rightCameraInfo.header.stamp = depth_img.header.stamp;
+                        rightCameraInfo.header.frame_id = depth_img.header.frame_id;
+                        depth_cameraInfoPublisher.publish(rightCameraInfo);
+                    }
+                }
+                if(outputRectified) {
+                    leftRectConverter.AData2RosMsg(rectifL, leftRect_img);
+                    rightRectConverter.AData2RosMsg(rectifR, rightRect_img);
+                    left_imageRect_pub.publish(leftRect_img);
+                    right_imageRect_pub.publish(rightRect_img);
+
+                    #ifndef PUB_IMG
+                    // publish camera info
+                    leftCameraInfo.header.stamp = leftRect_img.header.stamp;
+                    leftCameraInfo.header.frame_id = leftRect_img.header.frame_id;
+                    left_cameraInfoPublisher.publish(leftCameraInfo);
+                    rightCameraInfo.header.stamp =rightRect_img.header.stamp;
+                    rightCameraInfo.header.frame_id = rightRect_img.header.frame_id;
+                    right_cameraInfoPublisher.publish(rightCameraInfo);
+                    right_cnt++;
+                    #endif
                 }
             }
-            if(outputRectified) {
-                leftRectConverter.toRosMsg(rectifL, leftRect_img);
-                rightRectConverter.toRosMsg(rectifR, rightRect_img);
-                left_imageRect_pub.publish(leftRect_img);
-                right_imageRect_pub.publish(rightRect_img);
-
-                #ifndef PUB_IMG
-                // publish camera info
-                leftCameraInfo.header.stamp = leftRect_img.header.stamp;
-                leftCameraInfo.header.frame_id = leftRect_img.header.frame_id;
-                left_cameraInfoPublisher.publish(leftCameraInfo);
-                rightCameraInfo.header.stamp =rightRect_img.header.stamp;
-                rightCameraInfo.header.frame_id = rightRect_img.header.frame_id;
-                right_cameraInfoPublisher.publish(rightCameraInfo);
-                right_cnt++;
-                #endif
-            }
+            sw=0;
         }
         if(right_cnt >= 30){
             end = std::chrono::system_clock::now();  // 計測終了時間

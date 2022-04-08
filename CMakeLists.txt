@@ -5,6 +5,7 @@ project(depthai_ros_app)
 # add_compile_options(-std=c++11)
 #add_compile_options(-DDEPTHAI_HAVE_OPENCV_SUPPORT)
 #add_compile_options(-g)
+add_compile_options(-fpermissive)
 
 set(_opencv_version 4)
 find_package(OpenCV 4 QUIET COMPONENTS imgproc highgui)
@@ -168,10 +169,12 @@ add_library(${PROJECT_NAME}
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/depthai_ros_app_node.cpp)
 add_executable(rgb_depth src/rgb_depth.cpp)
+#add_executable(rgb_depth_kai src/rgb_depth_kai.cpp)
 #add_executable(rgb_depth_ex src/rgb_depth_ex.cpp)
-#add_executable(stereo_depth src/stereo_depth.cpp)
+#add_executable(rgb_depth_ex2 src/rgb_depth_ex2.cpp)
+add_executable(stereo_depth src/stereo_depth.cpp)
 #add_executable(rgb_publisher src/rgb_publisher.cpp)
-#add_executable(stereo_publisher src/stereo_publisher.cpp)
+add_executable(stereo_publisher src/stereo_publisher.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -193,26 +196,40 @@ target_link_libraries(rgb_depth
   depthai::core
 )
 
+#target_link_libraries(rgb_depth_kai
+#  ${catkin_LIBRARIES}
+#  ${PROJECT_NAME}
+#  depthai::core
+#)
+
 #target_link_libraries(rgb_depth_ex
 #  ${catkin_LIBRARIES}
 #  ${PROJECT_NAME}
 #  depthai::core
 #)
 
-#target_link_libraries(stereo_depth
+#target_link_libraries(rgb_depth_ex2
 #  ${catkin_LIBRARIES}
+#  ${PROJECT_NAME}
 #  depthai::core
 #)
+
+target_link_libraries(stereo_depth
+  ${catkin_LIBRARIES}
+  ${PROJECT_NAME}
+  depthai::core
+)
 
 #target_link_libraries(rgb_publisher
 #  ${catkin_LIBRARIES}
 #  depthai::core
 #)
 
-#target_link_libraries(stereo_publisher
-#  ${catkin_LIBRARIES}
-#  depthai::core
-#)
+target_link_libraries(stereo_publisher
+  ${catkin_LIBRARIES}
+  ${PROJECT_NAME}
+  depthai::core
+)
 
 #############
 ## Install ##
